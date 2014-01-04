@@ -1,18 +1,19 @@
+place :: Int -> [[Int]]
+place 0 = [[]]
+place n = go $ take n $ repeat [1..n] 
+    where go [] = [[]]
+          go (row:rest) = do
+                q <- row 
+                qs <- go $ safe q rest
+                return (q : qs)
+          safe q = notK q . notD q . notC q
+          notC q = map (filter (/= q))
+          notD q = (map (\(x, r) -> filter (\y -> abs(y - q) /= x) r)) . (zip [1..])
+          notK q = map (\(f, r) -> filter f r) . (zip (kFilters q))
+          kFilters q = (\x -> abs (x - q) /= 2) : (\x -> abs (x - q) > 1) : (repeat (const True))
 
-type Position = (Int, Int)
+solutions = length . place
 
-board :: Int -> [Position]
-board n = [(r, c) | r <- range, c <- range]
-    where range = [1..n]
-
-safe :: Position -> [Position] -> [Position]
-safe (r, c) = filter (\p -> (notR p) && (notC p) && (notD p) && (notK p))
-    where notR = (/= r) . fst
-          notC = (/= c) . snd
-          notD (r', c') = abs (r' - r) /= abs (c' - c)
-          notK (r', c') = notElem (abs (r' - r), abs (c' - c)) [(1, 2), (2, 1)]
-
-place :: Int -> [Position] -> [Position]
-place _ [] = []
-place 0 ps = ps
-place n (p:ps) = place (n - 1) (safe p ps)
+main = do
+    n <- readLn
+    putStrLn $ show $ solutions n
