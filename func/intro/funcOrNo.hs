@@ -1,19 +1,15 @@
-{-
- - This solution works only with ordered lists
- - which was a mistaken assumption about the input
- -}
 import Data.Maybe (isJust)
 import Control.Monad
-import Data.List (foldl1')
+import Data.List (foldl')
+import qualified Data.Set as Set
 
 isSortedSet :: Ord a => [a] -> Bool
 isSortedSet =
-    let maybeNext mx my = do
-            x <- mx
-            y <- my
-            guard (x < y)
-            return y
-        justSorted = (foldl1' maybeNext) . (map Just)
+    let maybeNext ms x = do
+            s <- ms
+            guard (Set.notMember x s)
+            return (Set.insert x s)
+        justSorted = foldl' maybeNext (Just Set.empty)
     in isJust . justSorted
     
 readSet :: IO [Int]
@@ -22,11 +18,11 @@ readSet = do
     lines <- replicateM n getLine
     return $ map (read . head . words) lines
 
-fmtOutput True = "Yes"
-fmtOutput _ = "No"
+fmtOutput True = "YES"
+fmtOutput _ = "NO"
 
 main = do
     n <- readLn
     sets <- replicateM n readSet
     let results = map isSortedSet sets
-    mapM_ (print . fmtOutput) results
+    mapM_ (putStrLn . fmtOutput) results
