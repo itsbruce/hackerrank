@@ -3,14 +3,14 @@ import Control.Monad
 import Data.List (foldl')
 import qualified Data.Set as Set
 
-isSortedSet :: Ord a => [a] -> Bool
-isSortedSet =
+isSet :: Ord a => [a] -> Bool
+isSet =
     let maybeNext ms x = do
             s <- ms
             guard (Set.notMember x s)
             return (Set.insert x s)
-        justSorted = foldl' maybeNext (Just Set.empty)
-    in isJust . justSorted
+        justSet = foldl' maybeNext (Just Set.empty)
+    in isJust . justSet
     
 readSet :: IO [Int]
 readSet = do
@@ -24,5 +24,5 @@ fmtOutput _ = "NO"
 main = do
     n <- readLn
     sets <- replicateM n readSet
-    let results = map isSortedSet sets
+    let results = map isSet sets
     mapM_ (putStrLn . fmtOutput) results
