@@ -16,8 +16,8 @@ readCoord :: String -> Coord
 readCoord s = let [first, second] = map read $ words s
               in  Coord first second
 
-circumference :: Int -> [Coord] -> Float
-circumference n cs =
+circumference :: [Coord] -> Float
+circumference cs =
     let start = (head cs, 0.0)
         step (c1, n) c2 = (c2, n + (distance c1 c2))
     in  snd $ foldl' step start $ reverse cs
@@ -25,4 +25,4 @@ circumference n cs =
 main = do
     n <- readLn
     ls <- replicateM n getLine
-    putStrLn $ show $ circumference n $ map readCoord ls
+    putStrLn $ show $ circumference $ map readCoord ls
