@@ -5,11 +5,11 @@ import qualified Data.Set as Set
 
 isSet :: Ord a => [a] -> Bool
 isSet =
-    let maybeNext ms x = do
-            s <- ms
-            guard (Set.notMember x s)
-            return (Set.insert x s)
-        justSet = foldl' maybeNext (Just Set.empty)
+    let maybeNext s x =
+            if Set.member x s
+                then Nothing
+                else Just (Set.insert x s)
+        justSet = foldM maybeNext Set.empty
     in isJust . justSet
     
 readSet :: IO [Int]
