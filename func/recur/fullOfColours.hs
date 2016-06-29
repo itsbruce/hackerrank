@@ -1,4 +1,4 @@
-import Control.Monad (mfilter, replicateM)
+import Control.Monad (mfilter, replicateM, foldM)
 import Data.List (foldl')
 import qualified Data.Map.Strict as Map
 import Data.Map.Strict ((!))
@@ -22,8 +22,10 @@ allClose t = (close 'R' 'G' t) && (close 'Y' 'B' t)
 
 full :: String -> Bool
 full = let  seed = Map.fromList [('R', 0), ('G', 0), ('Y', 0), ('B', 0)]
-            maybeNext mt x = mfilter allClose mt >> fmap (count x) mt
-            tally = foldl' maybeNext $ Just seed
+            maybeNext t x = if allClose t
+                                then Just $ count x t
+                                else Nothing
+            tally = foldM maybeNext seed
         in isJust . (mfilter allLevel) . tally
 
 main = do
