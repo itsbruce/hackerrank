@@ -1,5 +1,5 @@
 import Data.Monoid
-import Data.Foldable (foldMap)
+import Data.Foldable (Foldable, foldMap)
 import qualified Data.Vector as V
 -- import Control.Monad.Trans.State.Strict
 import Control.Monad.State
@@ -14,36 +14,39 @@ instance (Integral a) => Monoid (MinMult a) where
     mempty = MinMult 1
     mappend (MinMult x) (MinMult y) = MinMult (lcm x y)
 
-type AppStore = V.Vector Int
-type AppState a = StateT AppStore (Writer [Int]) a
+type AppStore = V.Vector Integer
+type AppState a = StateT AppStore (Writer [Integer]) a
 
 loadState :: [Int] -> AppStore
-loadState = V.fromList
+loadState = V.fromList . (map fromIntegral)
 
-updateState :: Int -> Int -> AppState ()
+updateState :: Int -> Integer -> AppState ()
 updateState i x = modify updateV
     where updateV v = V.update v (V.singleton (i, x * (v V.! i)))
             
-lcmSlice :: Int -> Int -> AppState Int
+lcmSlice :: Int -> Int -> AppState Integer
 lcmSlice i i2 = do
     v <- get
     let s = V.slice i (i2 - i + 1) v
-    return $ getMinMult $ foldMap MinMult s
+    -- return $ getMinMult $ foldMap MinMult s
+    return $ V.foldr lcm 1 s
 
 querySlice i i2 = do
     x <- lcmSlice i i2
     lift $ tell [x]
+    -- lift $ tell [fromIntegral x]
 
-data Query = Update Int Int | LCM Int Int
+data Query = Update Int Integer | LCM Int Int
 
 doQuery (LCM x y) = querySlice x y
 doQuery (Update x y) = updateState x y
 
 doQueries = mapM doQuery
 
-solution :: [Int] -> [Query] -> [Int]
+solution :: [Int] -> [Query] -> [Integer]
 solution xs qs =
     map mod1097 $ execWriter $ evalStateT (doQueries qs) $ loadState xs
+    -- execWriter $ evalStateT (doQueries qs) $ loadState xs
         where mod1097 = flip mod 1000000007
 
 readInitialState :: IO [Int]
