@@ -38,8 +38,17 @@ updateState i x = modify updateS
         updateS (v, g) = (updateV v, g)
         updateV v = V.update v (V.singleton (i, x * (v V.! i)))
             
+gcdM :: (Monad m, Integral a) => a -> a -> m a
+gcdM = (return .) . gcd
+
 lcmM :: (Monad m, Integral a) => a -> a -> m a
-lcmM = (return .) . lcm
+lcmM 0 _ = return 0
+lcmM _ 0 = return 0
+lcmM 1 x = return x
+lcmM x 1 = return x
+lcmM x y = do
+    gcd' <- gcdM x y
+    return $ abs $ x * (quot y gcd')
 
 lcmSliceM :: Int -> Int -> AppState Integer
 lcmSliceM i i2 = lcmSlice =<< takeSlice =<< getArray
