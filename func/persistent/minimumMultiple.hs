@@ -1,40 +1,55 @@
-import Data.Monoid
-import Data.Foldable (Foldable, foldMap)
+--import Data.Monoid
+import Data.Foldable -- (Foldable, fold, foldMap, foldr)
 import qualified Data.Vector as V
--- import Control.Monad.Trans.State.Strict
+import qualified Data.Map.Strict as M
 import Control.Monad.State
 import Control.Monad.Writer
-import Data.Int
---import Control.Monad.Trans
+import Prelude hiding (foldr)
 
+default (Integer)
+
+{-
 newtype MinMult a = MinMult { getMinMult :: a }
     deriving (Eq, Ord, Read, Show)
 
-instance (Integral a) => Monoid (MinMult a) where
+instance Integral a => Monoid (MinMult a) where
     mempty = MinMult 1
     mappend (MinMult x) (MinMult y) = MinMult (lcm x y)
+-}
 
-type AppStore = V.Vector Integer
-type AppState a = StateT AppStore (Writer [Integer]) a
+type AppArray = V.Vector Integer
+type GCDMap = M.Map (Integer, Integer) Integer
+type AppStore = (AppArray, GCDMap)
+type AppLog = [Integer]
+type AppState a = StateT AppStore (Writer AppLog) a
 
 loadState :: [Int] -> AppStore
-loadState = V.fromList . (map fromIntegral)
+loadState = (flip (,) M.empty) . V.fromList . (map fromIntegral)
+
+getArray :: AppState AppArray
+getArray = fmap fst get
+
+getGCDs :: AppState GCDMap
+getGCDs = fmap snd get
 
 updateState :: Int -> Integer -> AppState ()
-updateState i x = modify updateV
-    where updateV v = V.update v (V.singleton (i, x * (v V.! i)))
+updateState i x = modify updateS
+    where
+        updateS (v, g) = (updateV v, g)
+        updateV v = V.update v (V.singleton (i, x * (v V.! i)))
             
-lcmSlice :: Int -> Int -> AppState Integer
-lcmSlice i i2 = do
-    v <- get
-    let s = V.slice i (i2 - i + 1) v
-    -- return $ getMinMult $ foldMap MinMult s
-    return $ V.foldr lcm 1 s
+lcmM :: (Monad m, Integral a) => a -> a -> m a
+lcmM = (return .) . lcm
+
+lcmSliceM :: Int -> Int -> AppState Integer
+lcmSliceM i i2 = lcmSlice =<< takeSlice =<< getArray
+    where
+        lcmSlice = foldlM lcmM 1
+        takeSlice = return . (V.slice i (i2 - i + 1))
 
 querySlice i i2 = do
-    x <- lcmSlice i i2
+    x <- lcmSliceM i i2
     lift $ tell [x]
-    -- lift $ tell [fromIntegral x]
 
 data Query = Update Int Integer | LCM Int Int
 
@@ -46,7 +61,6 @@ doQueries = mapM doQuery
 solution :: [Int] -> [Query] -> [Integer]
 solution xs qs =
     map mod1097 $ execWriter $ evalStateT (doQueries qs) $ loadState xs
-    -- execWriter $ evalStateT (doQueries qs) $ loadState xs
         where mod1097 = flip mod 1000000007
 
 readInitialState :: IO [Int]
