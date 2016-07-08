@@ -18,43 +18,26 @@ instance Integral a => Monoid (MinMult a) where
 -}
 
 type AppArray = V.Vector Integer
-type GCDMap = M.Map (Integer, Integer) Integer
-type AppStore = (AppArray, GCDMap)
+type AppStore = AppArray
 type AppLog = [Integer]
 type AppState a = StateT AppStore (Writer AppLog) a
 
 loadState :: [Int] -> AppStore
-loadState = (flip (,) M.empty) . V.fromList . (map fromIntegral)
+loadState = V.fromList . (map fromIntegral)
 
 getArray :: AppState AppArray
-getArray = fmap fst get
-
-getGCDs :: AppState GCDMap
-getGCDs = fmap snd get
+getArray = get
 
 updateState :: Int -> Integer -> AppState ()
-updateState i x = modify updateS
+updateState = (modify . ) . updateV
     where
-        updateS (v, g) = (updateV v, g)
-        updateV v = V.update v (V.singleton (i, x * (v V.! i)))
+        updateV i x v = V.update v (V.singleton (i, x * (v V.! i)))
             
-gcdM :: (Monad m, Integral a) => a -> a -> m a
-gcdM = (return .) . gcd
-
-lcmM :: (Monad m, Integral a) => a -> a -> m a
-lcmM 0 _ = return 0
-lcmM _ 0 = return 0
-lcmM 1 x = return x
-lcmM x 1 = return x
-lcmM x y = do
-    gcd' <- gcdM x y
-    return $ abs $ x * (quot y gcd')
-
 lcmSliceM :: Int -> Int -> AppState Integer
-lcmSliceM i i2 = lcmSlice =<< takeSlice =<< getArray
+lcmSliceM = (fmap lcmSlice .) . takeSlice
     where
-        lcmSlice = foldlM lcmM 1
-        takeSlice = return . (V.slice i (i2 - i + 1))
+        lcmSlice = foldl' lcm 1
+        takeSlice i i2 = (return . (V.slice i (i2 - i + 1))) =<< getArray
 
 querySlice i i2 = do
     x <- lcmSliceM i i2
