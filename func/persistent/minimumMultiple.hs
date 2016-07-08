@@ -1,10 +1,13 @@
---import Data.Monoid
-import Data.Foldable -- (Foldable, fold, foldMap, foldr)
+-- {-# LANGUAGE TupleSections #-}
+import Data.Maybe (fromJust)
+import Data.Monoid
+import Data.Foldable (Foldable, fold, foldl', foldMap, foldr)
 import qualified Data.Vector as V
 import qualified Data.Map.Strict as M
-import Control.Monad.State
-import Control.Monad.Writer
-import Prelude hiding (foldr)
+-- import Control.Monad.State
+-- import Control.Monad.Writer
+import Control.Monad.RWS
+import Prelude hiding (foldr, foldl')
 
 default (Integer)
 
@@ -17,42 +20,65 @@ instance Integral a => Monoid (MinMult a) where
     mappend (MinMult x) (MinMult y) = MinMult (lcm x y)
 -}
 
-type AppArray = V.Vector Integer
-type AppStore = AppArray
+type AppEnv = V.Vector Integer
+type Updates = M.Map Int Integer
 type AppLog = [Integer]
-type AppState a = StateT AppStore (Writer AppLog) a
+type App a = RWS AppEnv AppLog Updates a
 
-loadState :: [Int] -> AppStore
-loadState = V.fromList . (map fromIntegral)
+loadEnv :: [Int] -> AppEnv
+loadEnv = V.fromList . (map fromIntegral)
 
-getArray :: AppState AppArray
-getArray = get
+initialState = M.empty
 
-updateState :: Int -> Integer -> AppState ()
-updateState = (modify . ) . updateV
-    where
-        updateV i x v = V.update v (V.singleton (i, x * (v V.! i)))
+getUpdates :: App Updates
+getUpdates = get
+
+lookupE :: Int -> App (Maybe Integer)
+lookupE i = fmap (V.!? i) ask
+
+lookupU :: Int -> App (Maybe Integer)
+lookupU i = fmap (M.lookup i) getUpdates
+
+addU :: Int -> Integer -> App ()
+addU i x = modify (M.insert i x)
+
+lookupVal :: Int -> App Integer
+lookupVal i = do
+    u <- lookupU i
+    e <- lookupE i
+    return $ fromJust $ getFirst $ (First u) <> (First e)
+
+addUpdate :: Int -> Integer -> App ()
+addUpdate i x = do
+    v <- lookupVal i
+    addU i (v * x)
             
-lcmSliceM :: Int -> Int -> AppState Integer
-lcmSliceM = (fmap lcmSlice .) . takeSlice
+envLcm :: Int -> Int -> App Integer
+envLcm  = (fmap lcmSlice .) . takeSlice
     where
         lcmSlice = foldl' lcm 1
-        takeSlice i i2 = (return . (V.slice i (i2 - i + 1))) =<< getArray
+        takeSlice i i2 = (return . (V.slice i (i2 - i + 1))) =<< ask
 
-querySlice i i2 = do
-    x <- lcmSliceM i i2
-    lift $ tell [x]
+updatesInRange i i2 = do
+    xs <- getUpdates
+    return $ M.filterWithKey (\k _ -> (k >= i) && (k <= i2)) xs
+
+queryLcm i i2 = do
+    e <- envLcm i i2
+    xs <- updatesInRange i i2
+    let x = foldl' lcm e xs
+    tell [x]
 
 data Query = Update Int Integer | LCM Int Int
 
-doQuery (LCM x y) = querySlice x y
-doQuery (Update x y) = updateState x y
+doQuery (LCM x y) = queryLcm x y
+doQuery (Update x y) = addUpdate x y
 
 doQueries = mapM doQuery
 
 solution :: [Int] -> [Query] -> [Integer]
 solution xs qs =
-    map mod1097 $ execWriter $ evalStateT (doQueries qs) $ loadState xs
+    map mod1097 $ snd $ evalRWS (doQueries qs) (loadEnv xs) initialState
         where mod1097 = flip mod 1000000007
 
 readInitialState :: IO [Int]
