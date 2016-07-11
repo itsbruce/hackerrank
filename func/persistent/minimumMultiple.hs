@@ -1,9 +1,11 @@
--- {-# LANGUAGE TupleSections #-}
+{-# LANGUAGE TupleSections #-}
+-- {-# LANGUAGE FlexibleContexts #-}
 import Data.Maybe (fromJust)
 import Data.Monoid
 import Data.Foldable (Foldable, fold, foldl', foldMap, foldr)
 import qualified Data.Vector as V
 import qualified Data.Map.Strict as M
+import Control.Monad (liftM2)
 -- import Control.Monad.State
 -- import Control.Monad.Writer
 import Control.Monad.RWS
@@ -20,53 +22,141 @@ instance Integral a => Monoid (MinMult a) where
     mappend (MinMult x) (MinMult y) = MinMult (lcm x y)
 -}
 
-type AppEnv = V.Vector Integer
-type Updates = M.Map Int Integer
+type AppArray = V.Vector Int
+type AppEnv = (AppArray, Cache)
 type AppLog = [Integer]
-type App a = RWS AppEnv AppLog Updates a
+type Updates = M.Map Int Integer
+type AppState = Updates
+type App a = RWS AppEnv AppLog AppState a
+
+-- data Empty
+-- data Branches = Empty | Range Range
+data Cache =
+    Chunk {
+        value:: Integer,
+        lowest ::  Int,
+        highest ::  Int,
+        chunk :: AppArray
+    } |
+    Span {
+        value :: Integer,
+        lowest ::  Int,
+        highest :: Int,
+        left ::  Cache,
+        right :: Cache
+    } deriving Show
+
+maxChunkSize = 8
+
+foldLcm :: (Functor f, Foldable f, Integral a) => Integer -> f a -> Integer
+foldLcm x = (foldl' lcm x) . (fmap fromIntegral)
+
+foldLcm1 :: (Functor f, Foldable f, Integral a) =>  f a -> Integer
+foldLcm1 = foldLcm 1
+
+sliceN = V.slice
+
+sliceXY x y = sliceN x (y - x + 1)
+
+makeCache ::  AppArray -> Cache
+makeCache xs = makeCacheXY 0 (V.length xs - 1) xs
+
+makeCacheXY :: Int -> Int -> AppArray -> Cache
+makeCacheXY i i2 xs
+        | xsize <= maxChunkSize = Chunk (foldLcm1 chunkSlice) i i2 chunkSlice
+        | otherwise = Span spanLcm i i2 left' right'
+    where   xsize = i2 - i + 1
+            chunkSlice = sliceXY i i2 xs
+            halves = (\(x, y) -> (x, x + y)) . (`divMod` 2)
+            (lsize, rsize) = halves xsize
+            left' = makeCacheXY i (i + lsize - 1) xs
+            right' = makeCacheXY (i + lsize) (i + lsize + rsize - 1) xs
+            spanLcm = lcm (value left') (value right')
+
+{-
+makeCacheI :: Int -> AppEnv -> Cache
+makeCacheI i xs
+        | xsize <= maxChunkSize = Chunk (foldLcm xs) i xtop xs
+        | otherwise = Span spanLcm i xtop left' right'
+    where   xsize = V.length xs
+            xtop = i + xsize - 1
+            halves = (\(x, y) -> (x, x + y)) . (`divMod` 2)
+            (lsize, rsize) = halves xsize
+            left' = makeCacheI i $ sliceN 0 lsize xs
+            right' = makeCacheI (i + lsize) $ sliceN lsize rsize xs
+            spanLcm = lcm (value left') (value right')
+-}
+    
+-- lcmInCache :: (MonadReader AppEnv m) => Int -> Int -> Cache -> m Integer
+lcmInCache :: Int -> Int -> Cache -> Integer
+lcmInCache x y c 
+        | matches = value c
+        | outside = 1
+        | otherwise = lic c
+    where
+        matches = (x <= lowest c) && (y >= highest c)
+        outside = (y < lowest c) || (x > highest c)
+        lic Span {} =
+            let l = lcmInCache x y $ left c
+                r = lcmInCache x y $ right c
+            in  lcm l r
+        lic Chunk {} =
+            let x' = max x (lowest c)
+                y' = min y (highest c)
+                i = x' - (lowest c)
+                n = y' - x' + 1
+            in  foldLcm1 $ sliceN i n $ chunk c
+
+lcmInAppCache x y = do
+    xs <- getCache
+    return $ lcmInCache x y xs
 
 loadEnv :: [Int] -> AppEnv
-loadEnv = V.fromList . (map fromIntegral)
+loadEnv xs = (loadArray, loadCache)
+    where   loadArray = V.fromList $ map fromIntegral xs
+            loadCache = makeCache loadArray
 
 initialState = M.empty
+
+getArray = fmap fst ask
+
+getCache :: App Cache
+getCache = fmap snd ask
 
 getUpdates :: App Updates
 getUpdates = get
 
-lookupE :: Int -> App (Maybe Integer)
-lookupE i = fmap (V.!? i) ask
+modifyUpdates f = modify f
+
+lookupE :: Int -> App (Maybe Int)
+lookupE i = fmap (V.!? i) getArray
 
 lookupU :: Int -> App (Maybe Integer)
 lookupU i = fmap (M.lookup i) getUpdates
 
 addU :: Int -> Integer -> App ()
-addU i x = modify (M.insert i x)
+addU i x = modifyUpdates (M.insert i x)
 
 lookupVal :: Int -> App Integer
 lookupVal i = do
     u <- lookupU i
     e <- lookupE i
-    return $ fromJust $ getFirst $ (First u) <> (First e)
+    let e' = fmap toInteger e
+    return $ fromJust $ getFirst $ (First u) <> (First e')
 
 addUpdate :: Int -> Integer -> App ()
 addUpdate i x = do
     v <- lookupVal i
     addU i (v * x)
             
-envLcm :: Int -> Int -> App Integer
-envLcm  = (fmap lcmSlice .) . takeSlice
-    where
-        lcmSlice = foldl' lcm 1
-        takeSlice i i2 = (return . (V.slice i (i2 - i + 1))) =<< ask
-
 updatesInRange i i2 = do
     xs <- getUpdates
     return $ M.filterWithKey (\k _ -> (k >= i) && (k <= i2)) xs
 
 queryLcm i i2 = do
-    e <- envLcm i i2
+    e <- lcmInAppCache i i2
     xs <- updatesInRange i i2
-    let x = foldl' lcm e xs
+    let x = foldLcm e xs
     tell [x]
 
 data Query = Update Int Integer | LCM Int Int
