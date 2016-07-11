@@ -1,4 +1,4 @@
-{-# LANGUAGE TupleSections #-}
+--{-# LANGUAGE TupleSections #-}
 -- {-# LANGUAGE FlexibleContexts #-}
 import Data.Maybe (fromJust)
 import Data.Monoid
@@ -73,21 +73,6 @@ makeCacheXY i i2 xs
             right' = makeCacheXY (i + lsize) (i + lsize + rsize - 1) xs
             spanLcm = lcm (value left') (value right')
 
-{-
-makeCacheI :: Int -> AppEnv -> Cache
-makeCacheI i xs
-        | xsize <= maxChunkSize = Chunk (foldLcm xs) i xtop xs
-        | otherwise = Span spanLcm i xtop left' right'
-    where   xsize = V.length xs
-            xtop = i + xsize - 1
-            halves = (\(x, y) -> (x, x + y)) . (`divMod` 2)
-            (lsize, rsize) = halves xsize
-            left' = makeCacheI i $ sliceN 0 lsize xs
-            right' = makeCacheI (i + lsize) $ sliceN lsize rsize xs
-            spanLcm = lcm (value left') (value right')
--}
-    
--- lcmInCache :: (MonadReader AppEnv m) => Int -> Int -> Cache -> m Integer
 lcmInCache :: Int -> Int -> Cache -> Integer
 lcmInCache x y c 
         | matches = value c
