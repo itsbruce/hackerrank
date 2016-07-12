@@ -1,36 +1,17 @@
---{-# LANGUAGE TupleSections #-}
--- {-# LANGUAGE FlexibleContexts #-}
-import Data.Maybe (fromJust)
 import Data.Monoid
-import Data.Foldable (Foldable, fold, foldl', foldMap, foldr)
+import Data.Foldable (Foldable, foldl', foldr)
 import qualified Data.Vector as V
-import qualified Data.Map.Strict as M
-import Control.Monad (liftM2)
--- import Control.Monad.State
--- import Control.Monad.Writer
-import Control.Monad.RWS
+import Control.Monad.State
+import Control.Monad.Writer
 import Prelude hiding (foldr, foldl')
 
 default (Integer)
 
-{-
-newtype MinMult a = MinMult { getMinMult :: a }
-    deriving (Eq, Ord, Read, Show)
-
-instance Integral a => Monoid (MinMult a) where
-    mempty = MinMult 1
-    mappend (MinMult x) (MinMult y) = MinMult (lcm x y)
--}
-
-type AppArray = V.Vector Int
-type AppEnv = (AppArray, Cache)
+type AppArray = V.Vector Integer
 type AppLog = [Integer]
-type Updates = M.Map Int Integer
-type AppState = Updates
-type App a = RWS AppEnv AppLog AppState a
+type AppState = Cache
+type App = WriterT AppLog (State AppState)
 
--- data Empty
--- data Branches = Empty | Range Range
 data Cache =
     Chunk {
         value:: Integer,
@@ -48,10 +29,9 @@ data Cache =
 
 maxChunkSize = 8
 
-foldLcm :: (Functor f, Foldable f, Integral a) => Integer -> f a -> Integer
-foldLcm x = (foldl' lcm x) . (fmap fromIntegral)
+foldLcm :: Foldable f => Integer -> f Integer -> Integer
+foldLcm x = foldl' lcm x
 
-foldLcm1 :: (Functor f, Foldable f, Integral a) =>  f a -> Integer
 foldLcm1 = foldLcm 1
 
 sliceN = V.slice
@@ -72,6 +52,22 @@ makeCacheXY i i2 xs
             left' = makeCacheXY i (i + lsize - 1) xs
             right' = makeCacheXY (i + lsize) (i + lsize + rsize - 1) xs
             spanLcm = lcm (value left') (value right')
+
+updateSlice i f s = s V.// [(i, f (s V.! i))]
+
+updateCache :: Int -> (Integer -> Integer) -> Cache -> Cache
+updateCache i f c
+        | not contains = c
+        | otherwise = uc c
+    where
+        contains = (i >= lowest c) && (i <= highest c)
+        uc (Chunk _ l h ch) =
+            let ch' = updateSlice (i - l) f ch
+            in  Chunk (foldLcm1 ch') l h ch'
+        uc (Span _ l h lft rt) =
+            let lft' = updateCache i f lft
+                rt' = updateCache i f rt
+            in  Span (lcm (value lft') (value rt')) l h lft' rt'
 
 lcmInCache :: Int -> Int -> Cache -> Integer
 lcmInCache x y c 
@@ -96,71 +92,34 @@ lcmInAppCache x y = do
     xs <- getCache
     return $ lcmInCache x y xs
 
-loadEnv :: [Int] -> AppEnv
-loadEnv xs = (loadArray, loadCache)
-    where   loadArray = V.fromList $ map fromIntegral xs
-            loadCache = makeCache loadArray
+initialState xs = makeCache xs
 
-initialState = M.empty
+getCache = get
 
-getArray = fmap fst ask
-
-getCache :: App Cache
-getCache = fmap snd ask
-
-getUpdates :: App Updates
-getUpdates = get
-
-modifyUpdates f = modify f
-
-lookupE :: Int -> App (Maybe Int)
-lookupE i = fmap (V.!? i) getArray
-
-lookupU :: Int -> App (Maybe Integer)
-lookupU i = fmap (M.lookup i) getUpdates
-
-addU :: Int -> Integer -> App ()
-addU i x = modifyUpdates (M.insert i x)
-
-lookupVal :: Int -> App Integer
-lookupVal i = do
-    u <- lookupU i
-    e <- lookupE i
-    let e' = fmap toInteger e
-    return $ fromJust $ getFirst $ (First u) <> (First e')
-
-addUpdate :: Int -> Integer -> App ()
-addUpdate i x = do
-    v <- lookupVal i
-    addU i (v * x)
+addUpdate i x = modify $ updateCache i (* x)
             
-updatesInRange i i2 = do
-    xs <- getUpdates
-    return $ M.filterWithKey (\k _ -> (k >= i) && (k <= i2)) xs
-
 queryLcm i i2 = do
     e <- lcmInAppCache i i2
-    xs <- updatesInRange i i2
-    let x = foldLcm e xs
-    tell [x]
+    tell [e]
 
 data Query = Update Int Integer | LCM Int Int
 
 doQuery (LCM x y) = queryLcm x y
 doQuery (Update x y) = addUpdate x y
 
-doQueries = mapM doQuery
+doQueries :: [Query] -> App ()
+doQueries = mapM_ doQuery
 
-solution :: [Int] -> [Query] -> [Integer]
+-- solution :: [Int] -> [Query] -> [Integer]
 solution xs qs =
-    map mod1097 $ snd $ evalRWS (doQueries qs) (loadEnv xs) initialState
+    map mod1097 $ evalState (execWriterT (doQueries qs)) (initialState xs)
         where mod1097 = flip mod 1000000007
 
-readInitialState :: IO [Int]
+readInitialState :: IO AppArray
 readInitialState = do
     n <- readLn
     l <- getLine
-    return $ map read $ take n $ words l
+    return $ V.fromList $ map read $ take n $ words l
 
 readQuery :: String -> Query
 readQuery = go . words
