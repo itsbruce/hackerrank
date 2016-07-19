@@ -25,13 +25,14 @@ askDepth = fmap snd ask
 nextDirection Up = Across
 nextDirection x = succ x
 
-dimension Across = askWidth
-dimension Back = askWidth
-dimension _ = askDepth
+dimensions Up = (\(w, d) -> (d, w))
+dimensions Down = dimensions Up
+dimensions _ = id
 
-room size (x, y)
-    | x < y = 0
-    | otherwise =  max 0 $ size - 1 - x - y
+room (w, d) (x, y)
+      | x < y = 0
+      | y >= d - (div d 2) = 0
+      | otherwise =  max 0 $ w - 1 - x - y
 
 asIfAcross Across l = return l
 asIfAcross Down (x, y) = askWidth >>= ((\w -> return (y, w - x - 1)))
@@ -39,9 +40,9 @@ asIfAcross Back (x, y) = ask >>= (\(w, d) -> return (w - x - 1, d - y - 1))
 asIfAcross Up (x, y) = askDepth >>= (\d -> return (d - y - 1, x))
 
 roomIn d l = do
-    size <- dimension d
     l' <- asIfAcross d l
-    return $ room size l'
+    wd <- ask
+    return $ room (dimensions d wd) l'
 
 
 travel Across n (x, y) = (x + n, y)
