@@ -73,13 +73,21 @@ move x@(d, n, l) = do
 moveTillDone x@(_, 0, l) = return x
 moveTillDone x = moveTillDone =<< move x
 
--- Which rectangle/square is a location in? (0 is the outside)
+{- Which rectangle/square is a location in? (0 is the outside)
+ - Works consistnetly only if the location is in one of the
+ - corners of that layer.  Works if the depth of the matrix
+ - <= it's width, so pass width and x in if that is not true
+ -}
 layer d y = abs (yr * (d' - (1 * yr)) - y' - (1 * yr * (d' - d'')))
     where
         (d', d'') = (\(x, y) -> (x + y, x)) $ divMod d 2
         (yr, y') = divMod y d'
 
--- Circumference of layer in which location falls
+{- Circumference of layer in which location falls
+ - Finds the nearest corner first (see above).
+ - Moving to a corner and flipping (w, d) (x, y)
+ - really should be done in the layer furnction
+ -}
 circumference l = do
         (w, d) <- ask
         let d' = min w d
@@ -99,8 +107,8 @@ circumference l = do
 
 -- Move clockwise starting with Across
 clockwise n l = do
-    c <- circumference l
-    let n' = mod n c
+    c <- circumference l            -- Calculate circumference of layer
+    let n' = mod n c                -- 
     (_, _, l') <- moveTillDone (Across, n', l)
     return l'
 
