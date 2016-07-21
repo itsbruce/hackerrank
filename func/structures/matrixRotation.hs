@@ -36,8 +36,8 @@ room (w, d) (x, y)
       | y >= d - (div d 2) = 0
       | otherwise =  max 0 $ w - 1 - x - y
 
-{- Rotate a location which move in a direction to the equivalent position
- - which could move Across
+{- Rotate a location which moves in a given direction to the equivalent
+ - position which could move Across
  -}
 asIfAcross Across l = return l
 asIfAcross Down (x, y) = askWidth >>= ((\w -> return (y, w - x - 1)))
@@ -60,8 +60,8 @@ travel Up n (x, y) = (x, y - n)
  - the new location with the unspent Distance and the next direction
  -}
 move :: (Direction, Distance, Location) -> App (Direction, Distance, Location)
-move x@(_, 0, l) = return x
-move x@(d, n, l) = do
+move m@(_, 0, l) = return m
+move m@(d, n, l) = do
         roomForX <- roomIn d l
         if n < roomForX
             then return (d, max 0 (n - roomForX), go n)
@@ -73,37 +73,22 @@ move x@(d, n, l) = do
 moveTillDone x@(_, 0, l) = return x
 moveTillDone x = moveTillDone =<< move x
 
-{- Which rectangle/square is a location in? (0 is the outside)
- - Works consistnetly only if the location is in one of the
- - corners of that layer.  Works if the depth of the matrix
- - <= it's width, so pass width and x in if that is not true
- -}
-layer d y = abs (yr * (d' - (1 * yr)) - y' - (1 * yr * (d' - d'')))
+-- Which rectangle/square is a location in? (0 is the outside)
+layer = \(x, y) -> do
+        (w, d) <- ask
+        return $ min (layer' w x) (layer' d y)
     where
-        (d', d'') = (\(x, y) -> (x + y, x)) $ divMod d 2
-        (yr, y') = divMod y d'
+        layer' w x =
+            let halve n = (\(x, y) -> x + y) $ divMod n 2
+                h = halve w
+                i = div x h
+            in  [x, w - x - 1] !! i
 
-{- Circumference of layer in which location falls
- - Finds the nearest corner first (see above).
- - Moving to a corner and flipping (w, d) (x, y)
- - really should be done in the layer furnction
- -}
+-- Circumference of layer in which location falls
 circumference l = do
         (w, d) <- ask
-        let d' = min w d
-        (x, y) <- moveToCorner
-        let y' = if w >= d
-                    then y
-                    else x
-        return $ (w + d) * 2 - 4 - (layer d' y') * 8
-    where
-        moveToCorner = do
-            (w, d) <- ask
-            (_, _, l') <- mtc =<< move (Across, w + d, l)
-            return l'
-        mtc m@(direction, distance, location)
-            | location /= l = return m
-            | otherwise = mtc =<< move m
+        n <- layer l
+        return $ (w + d) * 2 - 4 - n * 8
 
 -- Move clockwise starting with Across
 clockwise n l = do
@@ -114,6 +99,7 @@ clockwise n l = do
 
 rotateMatrix n m w d = M.mapWithKey getClockwise m
     where getClockwise k = const (m M.! (runReader (clockwise n k) (w, d)))
+    --where getClockwise k = const $ runReader (fmap show (layer k)) (w, d)
 
 loadMatrix = M.fromList . concat . (zipWith addXY [0..])
     where
