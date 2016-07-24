@@ -1,6 +1,3 @@
---{-# LANGUAGE TupleSections #-}
---import qualified Data.Foldable as F
---import Data.List
 import Control.Monad.State.Strict
 import Control.Monad.Reader
 import Data.List (sortBy)
@@ -98,6 +95,11 @@ inQueue x = do
     let qs = queue s
     return $ elem x qs
 
+emptyQueue = do
+    s <- get
+    let qs = queue s
+    return $ null qs
+
 enqueue x =
     let prepend = do
         s <- get
@@ -119,7 +121,11 @@ visit x = do
 
 minDistanceToGoal = do
     gv <- visited goal
-    if gv
+    failed <- emptyQueue
+    if failed
+        then setDistance (-1) goal
+        else return ()
+    if (gv || failed)
         then distanceTo goal
         else dequeue >>= visit >> minDistanceToGoal
 
