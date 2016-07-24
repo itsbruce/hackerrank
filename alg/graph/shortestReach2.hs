@@ -1,0 +1,143 @@
+import Control.Monad
+import Control.Monad.Reader
+import Control.Monad.State.Strict
+import Data.List (foldl', sortBy)
+import qualified Data.Map.Strict as M
+import Data.Ord
+import qualified Data.Vector.Unboxed as V
+
+type Edge = ((Int, Int), Int)
+type EdgeMap = M.Map (Int, Int) Int
+type Neighbour = (Int, Int)
+type Neighbours = V.Vector Neighbour
+type AdjacentMap = M.Map Int Neighbours
+data Adjacents = Adjacents { adjacents :: AdjacentMap }
+type Visited = M.Map Int Bool
+type Distances = M.Map Int Int
+type Queue = [Int]
+data BFSState = BFSState {
+    visits :: Visited,
+    distances :: Distances,
+    queue :: Queue
+}
+type BFS = ReaderT Adjacents (State BFSState)
+
+noDistance = -1
+
+buildAdjacents :: [Edge] -> AdjacentMap
+buildAdjacents es = 
+    let es' = map (\((x, y), z) -> ((y, x), z)) es
+        es'' = foldl' (flip (:)) es es'
+        p2v ((k, x), y) = M.singleton k $ V.singleton (x, y)
+        ev = map p2v es''
+        merge = M.unionWith (V.++)
+    in  foldl' merge M.empty ev
+
+initialState x = BFSState {
+    visits = M.empty,
+    distances = M.singleton x 0,
+    queue = [x]
+}
+
+visited x = return . find =<< fmap visits get
+    where
+        find = M.findWithDefault False x
+
+distanceTo x = return . find =<< fmap distances get
+    where
+        find = M.findWithDefault noDistance x
+
+neighbours x = return . find =<< fmap adjacents ask
+    where
+        find = M.findWithDefault V.empty x
+
+modifyDistances f = do
+    s <- get
+    let ds = distances s
+    put s { distances = f ds }
+
+setVisited x = do
+    s <- get
+    let vs = visits s
+    put s { visits = M.insert x True vs }
+
+setDistance n x = do
+    isV <- visited x
+    d <- distanceTo x
+    if (isV || d /=noDistance && d <= n)
+        then return ()
+        else modifyDistances (M.insert x n)
+
+dequeue :: BFS Int
+dequeue = do
+        s <- get
+        let ds = distances s
+        let qs = sortByDistance $ map (addDistance ds) $ queue s
+        let qs'= map fst qs
+        let q = head qs'
+        put s { queue = tail qs' }
+        return q
+    where
+        addDistance ds x = (x, M.findWithDefault noDistance x ds)
+        sortByDistance = sortBy (comparing snd)
+
+inQueue x = do
+    s <- get
+    let qs = queue s
+    return $ elem x qs
+
+emptyQueue = do
+    s <- get
+    let qs = queue s
+    return $ null qs
+
+enqueue x =
+    let prepend = do
+        s <- get
+        let qs = queue s
+        put s { queue = x : qs }
+    in  do
+            isV <- visited x
+            inQ <- inQueue x
+            if (isV || inQ)
+                then return ()
+                else prepend
+    
+visit x = do
+        d <- distanceTo x
+        ns <- fmap (V.toList) (neighbours x)
+        mapM_ (bump d) ns
+        mapM_ (enqueue . fst) ns
+        setVisited x
+    where
+        bump d (i, w) = setDistance (d + w) i
+
+allOtherDistances n = filterM (return . (/= 0)) =<< mapM distanceTo [1..n]
+
+traverseGraph n = do
+    done <- emptyQueue
+    if done
+        then allOtherDistances n
+        else dequeue >>= visit >> traverseGraph n
+
+solution n s es =
+    let initialReader = Adjacents $ buildAdjacents es
+    in  evalState (runReaderT (traverseGraph n) initialReader) (initialState s)
+
+runTest =
+    let makeEdge = (\[x, y, z] -> ((x, y), z)) . (map read) . (take 3) . words
+        readEdge = fmap makeEdge getLine
+        p2e (k, v) = M.singleton k $ v
+        merge = M.unionWith min
+        dedupe xs = M.toList $ foldl' merge M.empty $ map p2e xs
+    in  do
+            [n, m] <- fmap ((take 2) . (map read) . words) getLine
+            es <- replicateM m readEdge
+            let es' = dedupe es     -- Keep shortest edge if n+1 of same nodes
+            s <- readLn
+            return $ unwords $ (map show) $ solution n s es'
+
+main = do
+    n <- readLn
+    results <- replicateM n runTest
+    mapM_ putStrLn results
