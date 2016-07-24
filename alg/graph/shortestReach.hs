@@ -50,7 +50,7 @@ distanceTo x = return . find =<< fmap distances get
 
 neighbours x = return . find =<< fmap adjacents ask
     where
-        find as = as M.! x
+        find = M.findWithDefault V.empty x
 
 modifyDistances f = do
     s <- get
