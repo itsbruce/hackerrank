@@ -3,7 +3,6 @@ import Data.Bits
 import Data.Foldable (foldMap)
 import Data.List (foldl', mapAccumL)
 import qualified Data.Map.Strict as M
-import Data.Ord
 import Data.Word
 import qualified Data.Vector.Unboxed as V
 
@@ -54,12 +53,25 @@ compareBins = ((go . (dropWhile (== EQ))) .) . zipWith compare
         go [] = EQ
         go (x : _) = x
 
+{-
+changeMap = M.fromList [
+        ((1,0,0), [(1, (0,0,0))]),
+        ((0,1,0), [(1, (0,0,0))]),
+        ((1,1,0), [(2, (0,0,0))]),
+        ((0,0,1), [(1, (0,1,1)), (1, (1,0,1))]),
+        ((1,0,1), [(2, (0,1,1)), (0, (1,0,1))]),
+        ((1,1,1), [(1, (0,1,1)), (1, (1,0,1)), (0, (1,1,1))])
+    ]
+
+changes = flip M.filter changeMap
+-}
+
 noChoice (1,0,0) = [(,) 1 (0,0,0)]
 noChoice (0,1,0) = [(,) 1 (0,0,0)]
 noChoice (1,1,0) = [(,) 2 (0,0,0)]
+noChoice (0,0,1) = [(,) 1 (0,1,1)]
 noChoice t = [(,) 0 t]
 
-choice (0,0,1) = [(,) 1 (0,1,1), (,) 1 (1,0,1)]
 choice t@(1,0,1) = [(,) 2 (0,1,1), (,) 0 t]
 choice t@(1,1,1) = [(,) 1 (0,1,1), (,) 1 (1,0,1), (,) 0 t]
 choice t = [(,) 0 t]
@@ -97,7 +109,7 @@ alignABC k a b c =
         align = join $ fmap (safeFirst . alignChoice k') noChoices
         takeAB = (\(x, y, z) -> (x, y)) . unzip3
         ab2hex = fmap ((\(a, b) -> (bin2hex a, bin2hex b)) . takeAB)
-    in ab2hex align -- zipped
+    in ab2hex align
 
 runQ = do
     k <- readLn
@@ -108,7 +120,11 @@ runQ = do
 
 printAB Nothing = print (-1)
 printAB (Just (a, b)) = printTrim a >> printTrim b
-    where printTrim = putStrLn . dropWhile (== '0')
+    where
+        printTrim = putStrLn . trim0
+        trim0 ['0'] = ['0']
+        trim0 ('0':rest) = trim0 rest
+        trim0 x = x
 
 main = do
     q <- readLn
