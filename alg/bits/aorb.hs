@@ -1,13 +1,11 @@
 import Control.Monad
 import Data.Bits
-import Data.List (foldl', mapAccumL, sort, sortBy)
+import Data.Foldable (foldMap)
+import Data.List (foldl', mapAccumL)
 import qualified Data.Map.Strict as M
 import Data.Ord
 import Data.Word
 import qualified Data.Vector.Unboxed as V
-
-data Action a = Changed a | Unchanged a
-    deriving Show
 
 binMap :: M.Map Char [Word8]
 binMap = M.fromList [
@@ -29,7 +27,7 @@ binMap = M.fromList [
     ('F', [1,1,1,1])
     ]
 
-hex2bin = concatMap char2bin
+hex2bin = foldMap char2bin
     where char2bin = (M.!) binMap
 
 hexVec = V.fromList [
@@ -37,49 +35,69 @@ hexVec = V.fromList [
     ]
 
 word2hex :: Word8 -> Char
-word2hex = (V.unsafeIndex hexVec) . fromIntegral
+word2hex = V.unsafeIndex hexVec . fromIntegral
 
 bin2word :: [Word8] -> Word8
 bin2word = foldl' shiftIn 0
     where
         shiftIn 0 b = b
-        shiftIn a b = b .|. (shift a 1)
+        shiftIn a b = b .|. shift a 1
 
-bin2hex = (map (word2hex . bin2word)) . by4
+bin2hex = map (word2hex . bin2word) . by4
     where
         by4 [] = []
         by4 (a:b:c:d:rest) = [[a,b,c,d]] ++ (by4 rest)
 
 compareBins :: [Word8] -> [Word8] -> Ordering
-compareBins = ((go . (dropWhile (== EQ))) .) . (zipWith compare)
+compareBins = ((go . (dropWhile (== EQ))) .) . zipWith compare
     where
         go [] = EQ
         go (x : _) = x
 
-align :: (Word8 , Word8 , Word8) -> [Action (Word8, Word8, Word8)]
-align t@(a, b, c)
-    | a .|. b == c = [Unchanged t]
-    | c == 0 = [Changed (0,0,0)]
-    | otherwise = [Changed (0, 1, 1), Changed (1, 0, 1)]
+noChoice (1,0,0) = [(,) 1 (0,0,0)]
+noChoice (0,1,0) = [(,) 1 (0,0,0)]
+noChoice (1,1,0) = [(,) 2 (0,0,0)]
+noChoice t = [(,) 0 t]
 
-mapChanges = mapM align
+choice (0,0,1) = [(,) 1 (0,1,1), (,) 1 (1,0,1)]
+choice t@(1,0,1) = [(,) 2 (0,1,1), (,) 0 t]
+choice t@(1,1,1) = [(,) 1 (0,1,1), (,) 1 (1,0,1), (,) 0 t]
+choice t = [(,) 0 t]
 
-unChange k = sequence . snd . (mapAccumL extract k)
-    where
-        extract n (Unchanged x) = (n, Just x)
-        extract 0 (Changed x) = (0, Nothing)
-        extract n (Changed x) = (n - 1, Just x)
+unChange k = fmap sequence . mapAccumL extract k
 
-mapBack k = sequence . map (unChange k)
+extract n (0, x) = (n, [x])
+extract 0 (_, _) = (0, [])
+extract 1 (2, _) = (0, [])
+extract n (c, x) = (n - c, [x])
 
-takeAB = twoFromThree . unzip3
-    where
-        twoFromThree (a, b, c) = (a, b)
+align f _ [] = [[]]
+align f n (x:rest) = do
+    (c, t) <- f x
+    guard (n - c >= 0)
+    ts <- align f (n - c) rest
+    return $ [t] ++ ts
 
-zip3bin a b c = zip3 (hex2bin a) (hex2bin b) (hex2bin c)
+alignChoice k = align choice k
 
-alignABC k a b c = fmap ((\(a, b) -> (bin2hex a, bin2hex b)) . head . sort . (map takeAB)) $
-    mapBack k $ mapChanges $ zip3bin a b c
+safeFirst [] = Nothing
+safeFirst ([] : rest) = safeFirst rest
+safeFirst (x : _) = Just x
+
+zipABC a b c =
+    let xs = [a,b,c]
+        n = foldr max 0 $ map length xs
+        pad = reverse . take n . (++ repeat '0') . reverse
+        [a', b', c'] = map (hex2bin . pad) xs
+    in  zip3 a' b' c'
+
+alignABC k a b c =
+    let zipped = zipABC a b c
+        (k', noChoices) = fmap safeFirst $ unChange k $ foldMap noChoice zipped
+        align = join $ fmap (safeFirst . alignChoice k') noChoices
+        takeAB = (\(x, y, z) -> (x, y)) . unzip3
+        ab2hex = fmap ((\(a, b) -> (bin2hex a, bin2hex b)) . takeAB)
+    in ab2hex align -- zipped
 
 runQ = do
     k <- readLn
@@ -90,10 +108,9 @@ runQ = do
 
 printAB Nothing = print (-1)
 printAB (Just (a, b)) = printTrim a >> printTrim b
-    where printTrim = putStrLn . (dropWhile (== '0'))
+    where printTrim = putStrLn . dropWhile (== '0')
 
 main = do
     q <- readLn
     qs <- replicateM q runQ
     mapM_ printAB qs
-
