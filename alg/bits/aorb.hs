@@ -53,6 +53,7 @@ compareBins = ((go . (dropWhile (== EQ))) .) . zipWith compare
         go [] = EQ
         go (x : _) = x
 
+
 {-
 changeMap = M.fromList [
         ((1,0,0), [(1, (0,0,0))]),
@@ -60,7 +61,7 @@ changeMap = M.fromList [
         ((1,1,0), [(2, (0,0,0))]),
         ((0,0,1), [(1, (0,1,1)), (1, (1,0,1))]),
         ((1,0,1), [(2, (0,1,1)), (0, (1,0,1))]),
-        ((1,1,1), [(1, (0,1,1)), (1, (1,0,1)), (0, (1,1,1))])
+        ((1,1,1), [(1, (0,1,1)), (0, (1,1,1))])
     ]
 
 changes = flip M.filter changeMap
@@ -73,7 +74,7 @@ noChoice (0,0,1) = [(,) 1 (0,1,1)]
 noChoice t = [(,) 0 t]
 
 choice t@(1,0,1) = [(,) 2 (0,1,1), (,) 0 t]
-choice t@(1,1,1) = [(,) 1 (0,1,1), (,) 1 (1,0,1), (,) 0 t]
+choice t@(1,1,1) = [(,) 1 (0,1,1), (,) 0 t]
 choice t = [(,) 0 t]
 
 unChange k = fmap sequence . mapAccumL extract k
