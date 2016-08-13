@@ -8,12 +8,6 @@ anyksum k [] = False
 anyksum k [_] = False
 anyksum k (x:xs) = any (ksum k x) xs || anyksum k xs
 
-goodSubs k [] = [[]]
-goodSubs k (x:xs) =
-    let good = goodSubs k xs
-        goodWithX = filter (not . anyksum k) $ map (x:) good
-    in  good ++ goodWithX
-
 seed k = M.fromList $ zip [0..k-1] $ repeat 0
 
 inc m i = M.alter (fmap succ) i m
