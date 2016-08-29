@@ -1,45 +1,25 @@
 {-# LANGUAGE ViewPatterns #-}
-import Control.Monad (liftM2,msum,replicateM)
+import Control.Monad (replicateM)
 import Data.Foldable (toList)
 import Data.Sequence (
-        (<|),(><),ViewR(..),
-        Seq,spanr,empty,fromList,length,sort,splitAt,viewr
+        (|>),(><),ViewR(..),
+        Seq,fromList,singleton,spanl,splitAt,viewr
     )
-import Prelude hiding (length,reverse,sort,splitAt)
+import Prelude hiding (splitAt)
 
-data Stages a =
-    Test {value :: a, prefix :: Seq a, suffix :: Seq a} |
-    Tested {value :: a, part1 :: Seq a, part2 :: Seq a, suffix :: Seq a} |
-    Found { value :: a, prefix :: Seq a, suffix :: Seq a }
-        deriving Show
 
-test (Test v p s) =
-    let (p1, p2) = spanr (>= v) p
-    in  case (viewr p) of
-        EmptyR -> Nothing
-        _ -> measure $ Tested v p1 p2 s
+gsort (viewr -> EmptyR) _ = Nothing
+gsort (viewr -> p :> x) s@(viewr -> s' :> y)
+    | x >= y = gsort p $ s |> x
+    | otherwise = result p x s
 
-measure (Tested v p1 p2 s) =
-    case (viewr p1, viewr p2) of
-        (ps :> p, EmptyR) -> test $ Test p ps (v <| s)
-        (_, (xs :> x)) -> result $ Found v xs (x <| p1 >< s)
-        _ -> Nothing
-
-result (Found v p s) = Just $ p >< (v <| sort s)
-
-greaterPart xs = go xs
-    where
-        go (viewr -> ys :> y) = test $ Test y ys empty
+result p y s =
+    let (lower, higher) = spanl (<= y) s
+        (x, rest) = splitAt 1 higher
+    in  Just $ p >< x >< (lower |> y) >< rest
 
 greater (viewr -> EmptyR) = Nothing
-greater (viewr -> (viewr -> EmptyR) :> _) = Nothing
-greater xs = 
-    let l = length xs
-        splits = fmap (flip splitAt xs) [l-1,l-2..0]
-        tries = map (fmap greaterPart) splits
-        unsplit (p, t) = liftM2 (><) (Just p) t
-        unsplits = fmap unsplit tries
-    in  msum unsplits
+greater (viewr -> xs :> x) = gsort xs $ singleton x
 
 greaterIO = fmap (greater . fromList) getLine
 
