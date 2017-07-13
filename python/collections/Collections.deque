@@ -2,6 +2,13 @@
 from collections import deque
 
 if __name__ == '__main__':
+    commands = {
+        'append' : (lambda d,x: d.append(x)),
+        'appendleft' : (lambda d,x: d.appendleft(x)),
+        'pop' : (lambda d: d.pop()),
+        'popleft' : (lambda d: d.popleft()),
+    }
+
     def runCommand(d, command, arg = None):
         f = commands[command]
         if arg == None:
