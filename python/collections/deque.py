@@ -1,23 +1,15 @@
 #!/usr/bin/env python2
 from collections import deque
 
-commands = {
-    'append' : (lambda d,x: d.append(x)),
-    'appendleft' : (lambda d,x: d.appendleft(x)),
-    'pop' : (lambda d: d.pop()),
-    'popleft' : (lambda d: d.popleft()),
-}
+def nosuch(*args):
+    pass
 
-def runCommand(d, command, arg = None):
-    f = commands[command]
-    if arg == None:
-        f(d)
-    else:
-        f(d,arg)
+def runCommand(d, command, args):
+    getattr(d, command, nosuch)(*args)
         
 def parseInput(s):
     xs = s.split(' ')
-    return xs[0], xs[1] if len(xs) > 1 else None
+    return xs[0], xs[1:] if len(xs) > 1 else []
 
 if __name__ == '__main__':
     dq = deque()
