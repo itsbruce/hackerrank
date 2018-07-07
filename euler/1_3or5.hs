@@ -1,14 +1,14 @@
 import Control.Monad
 
-or35 = go [3,6..] [5,10..]
-    where
-        go xs@(x:xrest) ys@(y:yrest)
-            | x < y = x : (go xrest ys)
-            | x == y = x : (go xrest yrest)
-            | otherwise = y : (go xs yrest)
+sumDlessT :: Integer -> Integer -> Integer
+sumDlessT t d =
+    let n = div (t - 1) d
+    in  div (n  * (d * 2 + (n - 1) * d)) 2
 
-sumLessThan:: Integer -> Integer
-sumLessThan n = sum $ takeWhile (< n) or35
+sumLessThan :: Integer -> Integer
+sumLessThan t =
+    let sum1 = sumDlessT t
+    in  (sum1 3) + (sum1 5) - (sum1 15)
 
 tests :: Int -> IO [Integer]
 tests n = replicateM n readLn
