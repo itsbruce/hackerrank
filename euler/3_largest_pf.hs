@@ -1,5 +1,4 @@
 import Control.Monad
-import Data.Monoid (mconcat, Last(..))
 
 primes = 2 : 3 : sieve (tail primes) [5,7..]
     where
@@ -10,8 +9,11 @@ primes = 2 : 3 : sieve (tail primes) [5,7..]
 
 largestpf n = 
     let primesuspects = takeWhile ((<= n) . (* 2)) primes
-        candidates = filter ((== 0) . (mod n)) primesuspects
-        largest = getLast $ mconcat $ map (Last . Just) candidates
+        try _ biggest [] = biggest
+        try top biggest ps@(p:rest)
+            | mod top p == 0 = try (div top p) (Just p) $ takeWhile ((<= top) . (*  p)) ps
+            | otherwise = try top biggest rest
+        largest = try n Nothing primesuspects
     in  foldr const n largest
 
 tests :: Int -> IO [Integer]
